@@ -1,6 +1,7 @@
-use burncloud_database_core::{Database, DatabaseError, Result, create_default_database};
+use burncloud_database::{Database, DatabaseError, Result, create_default_database, create_database};
 use std::fs;
 use std::path::{Path, PathBuf};
+use tempfile::TempDir;
 
 /// Cross-platform compatibility and edge case tests
 /// These tests ensure the default database location feature works across different environments
@@ -152,14 +153,6 @@ async fn test_directory_creation_edge_cases() {
                     println!("Database initialization failed (acceptable in some environments): {}", e);
                 }
             }
-
-            // Clean up
-            if let Ok(default_path) = get_test_default_path() {
-                let _ = fs::remove_file(&default_path);
-                if let Some(parent) = default_path.parent() {
-                    let _ = fs::remove_dir_all(parent);
-                }
-            }
         }
         Err(e) => {
             println!("Database creation failed: {}", e);
@@ -193,14 +186,6 @@ async fn test_file_system_permissions() {
             }
 
             let _ = db.close().await;
-
-            // Clean up
-            if let Ok(default_path) = get_test_default_path() {
-                let _ = fs::remove_file(&default_path);
-                if let Some(parent) = default_path.parent() {
-                    let _ = fs::remove_dir_all(parent);
-                }
-            }
         }
         Err(DatabaseError::DirectoryCreation(msg)) => {
             println!("Directory creation failed due to permissions: {}", msg);
@@ -257,14 +242,6 @@ async fn test_concurrent_directory_creation() {
     // Clean up all databases
     for db in databases {
         let _ = db.close().await;
-    }
-
-    // Clean up files
-    if let Ok(default_path) = get_test_default_path() {
-        let _ = fs::remove_file(&default_path);
-        if let Some(parent) = default_path.parent() {
-            let _ = fs::remove_dir_all(parent);
-        }
     }
 }
 
@@ -335,19 +312,20 @@ fn test_environment_variable_handling() {
 #[tokio::test]
 async fn test_database_file_corruption_recovery() {
     // Test behavior when the database file exists but is corrupted
-    let default_path_result = get_test_default_path();
+    // Use a temporary directory to avoid interfering with other tests
+    if let Ok(temp_dir) = TempDir::new() {
+        let test_db_path = temp_dir.path().join("corrupted_test.db");
 
-    if let Ok(default_path) = default_path_result {
-        // Create the directory if it doesn't exist
-        if let Some(parent) = default_path.parent() {
+        // Create the parent directory if needed
+        if let Some(parent) = test_db_path.parent() {
             let _ = fs::create_dir_all(parent);
         }
 
         // Create a corrupted database file
         let corrupt_content = b"This is not a valid SQLite database file";
-        if fs::write(&default_path, corrupt_content).is_ok() {
-            // Try to initialize database with corrupted file
-            let db_result = Database::new_default_initialized().await;
+        if fs::write(&test_db_path, corrupt_content).is_ok() {
+            // Try to create database with corrupted file
+            let db_result = create_database(&test_db_path).await;
 
             match db_result {
                 Ok(_) => {
@@ -360,12 +338,7 @@ async fn test_database_file_corruption_recovery() {
                     println!("Database initialization failed with unexpected error: {}", e);
                 }
             }
-
-            // Clean up
-            let _ = fs::remove_file(&default_path);
-            if let Some(parent) = default_path.parent() {
-                let _ = fs::remove_dir_all(parent);
-            }
+            // No need to clean up - TempDir will be automatically deleted
         }
     }
 }
@@ -393,12 +366,23 @@ async fn test_very_long_paths() {
 
 // Helper function for tests
 fn get_test_default_path() -> Result<PathBuf> {
-    use burncloud_database_core::DatabaseError;
+    use burncloud_database::DatabaseError;
 
     let db_dir = if cfg!(target_os = "windows") {
         let user_profile = std::env::var("USERPROFILE")
             .map_err(|e| DatabaseError::PathResolution(format!("USERPROFILE not found: {}", e)))?;
-        PathBuf::from(user_profile)
+        let profile_path = PathBuf::from(user_profile);
+
+        // Convert to absolute path if it's not already
+        let absolute_profile = if profile_path.is_absolute() {
+            profile_path
+        } else {
+            std::env::current_dir()
+                .map_err(|e| DatabaseError::PathResolution(format!("Cannot get current directory: {}", e)))?
+                .join(profile_path)
+        };
+
+        absolute_profile
             .join("AppData")
             .join("Local")
             .join("BurnCloud")

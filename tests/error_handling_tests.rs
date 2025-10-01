@@ -1,4 +1,4 @@
-use burncloud_database_core::{Database, DatabaseError, Result, create_default_database};
+use burncloud_database::{Database, DatabaseError, Result, create_default_database};
 use std::fs;
 use std::path::PathBuf;
 
@@ -97,14 +97,6 @@ async fn test_invalid_sql_operations() {
         println!("✓ Invalid SQL operations correctly generate errors");
 
         let _ = db.close().await;
-
-        // Clean up
-        if let Ok(default_path) = get_test_default_path() {
-            let _ = fs::remove_file(&default_path);
-            if let Some(parent) = default_path.parent() {
-                let _ = fs::remove_dir_all(parent);
-            }
-        }
     } else {
         println!("Database creation failed, skipping invalid SQL tests");
     }
@@ -127,7 +119,7 @@ async fn test_connection_pool_exhaustion() {
                 let result = sqlx::query(&format!("SELECT {} as operation_id", i))
                     .execute(connection.pool())
                     .await
-                    .map_err(|e| burncloud_database_core::DatabaseError::Connection(e));
+                    .map_err(|e| burncloud_database::DatabaseError::Connection(e));
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 result
             });
@@ -152,14 +144,6 @@ async fn test_connection_pool_exhaustion() {
         assert!(success_count > 0, "At least some operations should succeed");
 
         let _ = db.close().await;
-
-        // Clean up
-        if let Ok(default_path) = get_test_default_path() {
-            let _ = fs::remove_file(&default_path);
-            if let Some(parent) = default_path.parent() {
-                let _ = fs::remove_dir_all(parent);
-            }
-        }
     } else {
         println!("Database creation failed, skipping connection pool test");
     }
@@ -179,14 +163,6 @@ async fn test_database_close_scenarios() {
     if let Ok(db) = db_result {
         let close_result = db.close().await;
         assert!(close_result.is_ok(), "Closing initialized database should succeed");
-
-        // Clean up
-        if let Ok(default_path) = get_test_default_path() {
-            let _ = fs::remove_file(&default_path);
-            if let Some(parent) = default_path.parent() {
-                let _ = fs::remove_dir_all(parent);
-            }
-        }
     }
 
     // Test double close (should not panic)
@@ -293,13 +269,6 @@ async fn test_race_conditions_in_initialization() {
     for db in databases {
         let _ = db.close().await;
     }
-
-    if let Ok(default_path) = get_test_default_path() {
-        let _ = fs::remove_file(&default_path);
-        if let Some(parent) = default_path.parent() {
-            let _ = fs::remove_dir_all(parent);
-        }
-    }
 }
 
 #[test]
@@ -364,7 +333,7 @@ async fn test_resource_cleanup_on_errors() {
 
 // Helper function for tests
 fn get_test_default_path() -> Result<PathBuf> {
-    use burncloud_database_core::DatabaseError;
+    use burncloud_database::DatabaseError;
 
     let db_dir = if cfg!(target_os = "windows") {
         let user_profile = std::env::var("USERPROFILE")

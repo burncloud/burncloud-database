@@ -1,9 +1,7 @@
-use burncloud_database_core::{
-    Database, DatabaseError, Result,
+use burncloud_database::{
+    Database, DatabaseError,
     create_database, create_in_memory_database, create_default_database
 };
-use std::fs;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 /// API compatibility and regression tests
@@ -75,14 +73,6 @@ async fn test_all_database_creation_methods() {
     if let Ok(default_convenience_db) = default_convenience_result {
         assert!(default_convenience_db.connection().is_ok(), "Default convenience database should be initialized");
         let _ = default_convenience_db.close().await;
-    }
-
-    // Clean up default database files
-    if let Ok(default_path) = get_test_default_path() {
-        let _ = fs::remove_file(&default_path);
-        if let Some(parent) = default_path.parent() {
-            let _ = fs::remove_dir_all(parent);
-        }
     }
 
     println!("✓ All database creation methods tested for consistency");
@@ -361,9 +351,12 @@ async fn create_test_databases() -> Vec<(String, Database)> {
         }
     }
 
-    // Default location database (may fail in some environments)
-    if let Ok(default_db) = create_default_database().await {
-        databases.push(("default_location".to_string(), default_db));
+    // Default location database (using temporary directory for testing)
+    if let Ok(temp_dir) = TempDir::new() {
+        let test_default_path = temp_dir.path().join("BurnCloud").join("data.db");
+        if let Ok(test_db) = create_database(&test_default_path).await {
+            databases.push(("default_location".to_string(), test_db));
+        }
     }
 
     databases
@@ -374,31 +367,4 @@ async fn cleanup_test_databases(databases: Vec<(String, Database)>) {
         let _ = db.close().await;
         println!("✓ Cleaned up {} database", db_type);
     }
-
-    // Clean up default location files
-    if let Ok(default_path) = get_test_default_path() {
-        let _ = fs::remove_file(&default_path);
-        if let Some(parent) = default_path.parent() {
-            let _ = fs::remove_dir_all(parent);
-        }
-    }
-}
-
-fn get_test_default_path() -> Result<PathBuf> {
-    use burncloud_database_core::DatabaseError;
-
-    let db_dir = if cfg!(target_os = "windows") {
-        let user_profile = std::env::var("USERPROFILE")
-            .map_err(|e| DatabaseError::PathResolution(format!("USERPROFILE not found: {}", e)))?;
-        PathBuf::from(user_profile)
-            .join("AppData")
-            .join("Local")
-            .join("BurnCloud")
-    } else {
-        dirs::home_dir()
-            .ok_or_else(|| DatabaseError::PathResolution("Home directory not found".to_string()))?
-            .join(".burncloud")
-    };
-
-    Ok(db_dir.join("data.db"))
 }

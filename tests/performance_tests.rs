@@ -1,4 +1,4 @@
-use burncloud_database_core::{Database, create_default_database, Result};
+use burncloud_database::{Database, create_default_database, Result};
 use std::time::{Duration, Instant};
 use tokio::time::timeout;
 
@@ -25,14 +25,6 @@ async fn test_database_creation_performance() {
             );
 
             let _ = db.close().await;
-
-            // Clean up
-            if let Ok(default_path) = get_test_default_path() {
-                let _ = std::fs::remove_file(&default_path);
-                if let Some(parent) = default_path.parent() {
-                    let _ = std::fs::remove_dir_all(parent);
-                }
-            }
         }
         Ok(Err(e)) => {
             println!("Database creation failed (acceptable in some environments): {}", e);
@@ -68,7 +60,7 @@ async fn test_concurrent_database_access() {
                 );
                 // Use connection pool directly for concurrent access
                 let result = sqlx::query(&query).execute(connection.pool()).await;
-                result.map_err(|e| burncloud_database_core::DatabaseError::Connection(e))
+                result.map_err(|e| burncloud_database::DatabaseError::Connection(e))
             });
             handles.push(handle);
         }
@@ -98,14 +90,6 @@ async fn test_concurrent_database_access() {
         }
 
         let _ = db.close().await;
-
-        // Clean up
-        if let Ok(default_path) = get_test_default_path() {
-            let _ = std::fs::remove_file(&default_path);
-            if let Some(parent) = default_path.parent() {
-                let _ = std::fs::remove_dir_all(parent);
-            }
-        }
     } else {
         println!("Database creation failed, skipping concurrent test");
     }
@@ -171,14 +155,6 @@ async fn test_large_dataset_operations() {
         }
 
         let _ = db.close().await;
-
-        // Clean up
-        if let Ok(default_path) = get_test_default_path() {
-            let _ = std::fs::remove_file(&default_path);
-            if let Some(parent) = default_path.parent() {
-                let _ = std::fs::remove_dir_all(parent);
-            }
-        }
     } else {
         println!("Database creation failed, skipping performance test");
     }
@@ -216,11 +192,6 @@ async fn test_database_initialization_performance() {
         if let Ok(db) = result {
             initialized_times.push(elapsed);
             let _ = db.close().await;
-
-            // Clean up after each iteration
-            if let Ok(default_path) = get_test_default_path() {
-                let _ = std::fs::remove_file(&default_path);
-            }
         }
     }
 
@@ -230,14 +201,6 @@ async fn test_database_initialization_performance() {
 
         // The initialized version should take longer but still be reasonable
         assert!(avg_initialized < Duration::from_secs(10), "Initialization taking too long: {:?}", avg_initialized);
-    }
-
-    // Clean up any remaining files
-    if let Ok(default_path) = get_test_default_path() {
-        let _ = std::fs::remove_file(&default_path);
-        if let Some(parent) = default_path.parent() {
-            let _ = std::fs::remove_dir_all(parent);
-        }
     }
 }
 
@@ -271,14 +234,6 @@ async fn test_memory_usage_stability() {
         println!("✓ Completed 100 repeated operations without issues");
 
         let _ = db.close().await;
-
-        // Clean up
-        if let Ok(default_path) = get_test_default_path() {
-            let _ = std::fs::remove_file(&default_path);
-            if let Some(parent) = default_path.parent() {
-                let _ = std::fs::remove_dir_all(parent);
-            }
-        }
     } else {
         println!("Database creation failed, skipping memory stability test");
     }
@@ -302,14 +257,6 @@ async fn test_rapid_database_creation_and_destruction() {
             }
 
             let _ = db.close().await;
-
-            // Clean up each iteration
-            if let Ok(default_path) = get_test_default_path() {
-                let _ = std::fs::remove_file(&default_path);
-                if let Some(parent) = default_path.parent() {
-                    let _ = std::fs::remove_dir_all(parent);
-                }
-            }
         }
 
         let cycle_time = start.elapsed();
@@ -324,7 +271,7 @@ async fn test_rapid_database_creation_and_destruction() {
 
 // Helper function for tests
 fn get_test_default_path() -> Result<std::path::PathBuf> {
-    use burncloud_database_core::DatabaseError;
+    use burncloud_database::DatabaseError;
     use std::path::PathBuf;
 
     let db_dir = if cfg!(target_os = "windows") {

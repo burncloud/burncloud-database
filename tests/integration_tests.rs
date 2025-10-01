@@ -1,4 +1,4 @@
-use burncloud_database_core::{Database, DatabaseError, Result, create_default_database};
+use burncloud_database::{Database, DatabaseError, Result, create_default_database};
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -13,10 +13,16 @@ async fn test_create_default_database_end_to_end() {
 
     match result {
         Ok(db) => {
+            // Clean up any existing test data from previous runs
+            let _ = db.execute_query("DROP TABLE IF EXISTS test_table").await;
+
             // Verify the database is functional by performing operations
             let create_result = db.execute_query(
                 "CREATE TABLE IF NOT EXISTS test_table (id INTEGER PRIMARY KEY, name TEXT)"
             ).await;
+            if let Err(e) = &create_result {
+                eprintln!("Failed to create table: {:?}", e);
+            }
             assert!(create_result.is_ok(), "Should be able to create tables");
 
             let insert_result = db.execute_query(
@@ -39,14 +45,6 @@ async fn test_create_default_database_end_to_end() {
 
             // Clean up
             let _ = db.close().await;
-
-            // Try to clean up the created database file if possible
-            if let Ok(default_path) = get_test_default_path() {
-                let _ = fs::remove_file(&default_path);
-                if let Some(parent) = default_path.parent() {
-                    let _ = fs::remove_dir_all(parent);
-                }
-            }
         }
         Err(e) => {
             // In environments where file database creation might fail,
@@ -103,14 +101,6 @@ async fn test_database_new_default_vs_new_default_initialized() {
             assert!(query_result.is_ok(), "Should be able to execute queries");
 
             let _ = db.close().await;
-
-            // Clean up
-            if let Ok(default_path) = get_test_default_path() {
-                let _ = fs::remove_file(&default_path);
-                if let Some(parent) = default_path.parent() {
-                    let _ = fs::remove_dir_all(parent);
-                }
-            }
         }
         Err(e) => {
             println!("new_default_initialized() failed (acceptable in some environments): {}", e);
@@ -177,8 +167,6 @@ async fn test_directory_creation_and_permissions() {
 
                     // Clean up
                     let _ = db.close().await;
-                    let _ = fs::remove_file(&default_path);
-                    let _ = fs::remove_dir_all(parent_dir);
                 }
             }
         }
@@ -206,13 +194,6 @@ async fn test_multiple_database_instances() {
             // Clean up
             let _ = db1.close().await;
             let _ = db2.close().await;
-
-            if let Ok(default_path) = get_test_default_path() {
-                let _ = fs::remove_file(&default_path);
-                if let Some(parent) = default_path.parent() {
-                    let _ = fs::remove_dir_all(parent);
-                }
-            }
         }
         _ => {
             println!("Multiple database creation failed (acceptable in some environments)");
@@ -262,14 +243,6 @@ async fn test_database_persistence() {
                 }
             }
         }
-
-        // Clean up
-        if let Ok(default_path) = get_test_default_path() {
-            let _ = fs::remove_file(&default_path);
-            if let Some(parent) = default_path.parent() {
-                let _ = fs::remove_dir_all(parent);
-            }
-        }
     }
 }
 
@@ -299,14 +272,6 @@ async fn test_backward_compatibility() {
         let query_result = default_db.execute_query("SELECT 1 as test").await;
         assert!(query_result.is_ok(), "Default database should be functional");
         let _ = default_db.close().await;
-
-        // Clean up default database
-        if let Ok(default_path) = get_test_default_path() {
-            let _ = fs::remove_file(&default_path);
-            if let Some(parent) = default_path.parent() {
-                let _ = fs::remove_dir_all(parent);
-            }
-        }
     }
 }
 
