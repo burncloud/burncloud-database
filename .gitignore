@@ -9,7 +9,9 @@ AppData
 # Cargo.lock
 
 # IDEs
-.vscode/
+.claude
+.vscode
+.specify
 .idea/
 *.swp
 *.swo
