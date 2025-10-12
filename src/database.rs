@@ -163,18 +163,6 @@ impl Database {
     }
 }
 
-pub async fn create_database<P: AsRef<Path>>(path: P) -> Result<Database> {
-    let mut db = Database::new(path);
-    db.initialize().await?;
-    Ok(db)
-}
-
-pub async fn create_in_memory_database() -> Result<Database> {
-    let mut db = Database::new_in_memory();
-    db.initialize().await?;
-    Ok(db)
-}
-
 pub async fn create_default_database() -> Result<Database> {
     Database::new_default_initialized().await
 }
