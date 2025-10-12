@@ -162,20 +162,8 @@ async fn test_large_dataset_operations() {
 
 #[tokio::test]
 async fn test_database_initialization_performance() {
-    // Test the performance difference between different initialization methods
+    // Test the performance of database creation and initialization
     let num_iterations = 5;
-
-    // Test Database::new_with_path() performance (just creation, no initialization)
-    let mut new_with_path_times = vec![];
-    for _ in 0..num_iterations {
-        let start = Instant::now();
-        let _db = Database::new_with_path("performance_test.db");
-        let elapsed = start.elapsed();
-        new_with_path_times.push(elapsed);
-    }
-
-    let avg_new_with_path = new_with_path_times.iter().sum::<Duration>() / new_with_path_times.len() as u32;
-    println!("✓ Average Database::new_with_path() time: {:?}", avg_new_with_path);
 
     // Test Database::new() performance (creation + initialization)
     let mut initialized_times = vec![];
@@ -194,8 +182,27 @@ async fn test_database_initialization_performance() {
         let avg_initialized = initialized_times.iter().sum::<Duration>() / initialized_times.len() as u32;
         println!("✓ Average Database::new() time: {:?}", avg_initialized);
 
-        // The initialized version should take longer but still be reasonable
+        // The initialized version should be reasonable
         assert!(avg_initialized < Duration::from_secs(10), "Initialization taking too long: {:?}", avg_initialized);
+    }
+
+    // Test create_default_database() performance for comparison
+    let mut convenience_times = vec![];
+    for _ in 0..num_iterations {
+        let start = Instant::now();
+        let result = create_default_database().await;
+        let elapsed = start.elapsed();
+
+        if let Ok(db) = result {
+            convenience_times.push(elapsed);
+            let _ = db.close().await;
+        }
+    }
+
+    if !convenience_times.is_empty() {
+        let avg_convenience = convenience_times.iter().sum::<Duration>() / convenience_times.len() as u32;
+        println!("✓ Average create_default_database() time: {:?}", avg_convenience);
+        assert!(avg_convenience < Duration::from_secs(10), "Convenience function taking too long: {:?}", avg_convenience);
     }
 }
 

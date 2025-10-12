@@ -1,5 +1,4 @@
 use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
-use std::path::Path;
 
 use crate::error::{DatabaseError, Result};
 

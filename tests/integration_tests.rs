@@ -66,20 +66,8 @@ async fn test_create_default_database_end_to_end() {
 }
 
 #[tokio::test]
-async fn test_database_new_with_path_vs_new_default() {
-    // Test the difference between new_with_path() and Database::new() (default)
-
-    // Test new_with_path() - should create Database but not initialize
-    let db_uninitialized = Database::new_with_path("test_integration.db");
-    // Should not be initialized yet
-    let connection_result = db_uninitialized.connection();
-    assert!(connection_result.is_err(), "Database should not be initialized yet");
-
-    if let Err(DatabaseError::NotInitialized) = connection_result {
-        // This is expected
-    } else {
-        panic!("Expected NotInitialized error, got other error");
-    }
+async fn test_database_initialization_patterns() {
+    // Test different database initialization patterns (since new_with_path is removed)
 
     // Test Database::new() - should create and initialize with default path
     let db_initialized_result = Database::new().await;
@@ -97,6 +85,19 @@ async fn test_database_new_with_path_vs_new_default() {
         }
         Err(e) => {
             println!("Database::new() failed (acceptable in some environments): {}", e);
+        }
+    }
+
+    // Test create_default_database() convenience function
+    let convenience_result = create_default_database().await;
+    match convenience_result {
+        Ok(db) => {
+            let query_result = db.execute_query("SELECT 1 as test").await;
+            assert!(query_result.is_ok(), "Convenience function should work");
+            let _ = db.close().await;
+        }
+        Err(e) => {
+            println!("create_default_database() failed (acceptable in some environments): {}", e);
         }
     }
 }
@@ -241,26 +242,33 @@ async fn test_database_persistence() {
 
 #[tokio::test]
 async fn test_backward_compatibility() {
-    // Test that explicit path APIs still work alongside default location APIs
-    let temp_dir = TempDir::new().expect("Should be able to create temp directory");
-    let explicit_path = temp_dir.path().join("explicit_test.db");
+    // Test that default database APIs work consistently
+    // Since new_with_path is removed, test with default database patterns
 
-    // Test explicit path database creation
-    let mut explicit_db = Database::new_with_path(&explicit_path);
-    let init_result = explicit_db.initialize().await;
-
-    if init_result.is_ok() {
-        let query_result = explicit_db.execute_query("SELECT 1 as test").await;
-        assert!(query_result.is_ok(), "Explicit path database should be functional");
-        let _ = explicit_db.close().await;
-    }
-
-    // Test that default and explicit path databases are independent
+    // Test default database creation
     let default_db_result = Database::new().await;
     if let Ok(default_db) = default_db_result {
         let query_result = default_db.execute_query("SELECT 1 as test").await;
         assert!(query_result.is_ok(), "Default database should be functional");
         let _ = default_db.close().await;
+    }
+
+    // Test that multiple database instances work independently
+    let db1_result = Database::new().await;
+    let db2_result = create_default_database().await;
+
+    match (db1_result, db2_result) {
+        (Ok(db1), Ok(db2)) => {
+            let query1 = db1.execute_query("SELECT 1 as test").await;
+            let query2 = db2.execute_query("SELECT 1 as test").await;
+            assert!(query1.is_ok(), "First database should be functional");
+            assert!(query2.is_ok(), "Second database should be functional");
+            let _ = db1.close().await;
+            let _ = db2.close().await;
+        }
+        _ => {
+            println!("Multiple database creation scenarios tested (some failures acceptable in test environments)");
+        }
     }
 }
 
@@ -288,16 +296,17 @@ fn test_error_handling_scenarios() {
         }
     }
 
-    // Test API error types
-    let db = Database::new_with_path("test.db");
-    let connection_result = db.connection();
-    assert!(connection_result.is_err(), "Should fail when not initialized");
-
-    if let Err(DatabaseError::NotInitialized) = connection_result {
-        // Expected error type
-        println!("✓ NotInitialized error correctly returned");
-    } else {
-        panic!("Expected NotInitialized error, got other error");
+    // Test API consistency without using async operations in a sync test
+    // We'll just verify that the path resolution logic works correctly
+    let path_result = get_test_default_path();
+    match path_result {
+        Ok(path) => {
+            println!("✓ Path resolution succeeded: {}", path.display());
+            assert!(path.to_string_lossy().contains("data.db"));
+        }
+        Err(e) => {
+            println!("Path resolution failed (acceptable in test environments): {}", e);
+        }
     }
 }
 
@@ -305,11 +314,7 @@ fn test_error_handling_scenarios() {
 async fn test_api_consistency() {
     // Test that all database creation APIs follow consistent patterns
 
-    // Test explicit path database (existing API)
-    let _explicit_db = Database::new_with_path("test.db");
-    // We can't access the path directly, but we know it should be the explicit path
-
-    // Test default path database (new API)
+    // Test default path database (main API now)
     let default_db_result = Database::new().await;
     match default_db_result {
         Ok(default_db) => {
@@ -319,6 +324,18 @@ async fn test_api_consistency() {
         }
         Err(e) => {
             println!("Default database creation failed (acceptable): {}", e);
+        }
+    }
+
+    // Test convenience function for consistency
+    let convenience_result = create_default_database().await;
+    match convenience_result {
+        Ok(default_db) => {
+            println!("✓ Convenience function works consistently");
+            let _ = default_db.close().await;
+        }
+        Err(e) => {
+            println!("Convenience function failed (acceptable): {}", e);
         }
     }
 }
