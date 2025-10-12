@@ -165,28 +165,23 @@ async fn test_database_initialization_performance() {
     // Test the performance difference between different initialization methods
     let num_iterations = 5;
 
-    // Test Database::new_default() performance
-    let mut new_default_times = vec![];
+    // Test Database::new_with_path() performance (just creation, no initialization)
+    let mut new_with_path_times = vec![];
     for _ in 0..num_iterations {
         let start = Instant::now();
-        let result = Database::new_default();
+        let _db = Database::new_with_path("performance_test.db");
         let elapsed = start.elapsed();
-
-        if result.is_ok() {
-            new_default_times.push(elapsed);
-        }
+        new_with_path_times.push(elapsed);
     }
 
-    if !new_default_times.is_empty() {
-        let avg_new_default = new_default_times.iter().sum::<Duration>() / new_default_times.len() as u32;
-        println!("✓ Average Database::new_default() time: {:?}", avg_new_default);
-    }
+    let avg_new_with_path = new_with_path_times.iter().sum::<Duration>() / new_with_path_times.len() as u32;
+    println!("✓ Average Database::new_with_path() time: {:?}", avg_new_with_path);
 
-    // Test Database::new_default_initialized() performance
+    // Test Database::new() performance (creation + initialization)
     let mut initialized_times = vec![];
     for _ in 0..num_iterations {
         let start = Instant::now();
-        let result = Database::new_default_initialized().await;
+        let result = Database::new().await;
         let elapsed = start.elapsed();
 
         if let Ok(db) = result {
@@ -197,7 +192,7 @@ async fn test_database_initialization_performance() {
 
     if !initialized_times.is_empty() {
         let avg_initialized = initialized_times.iter().sum::<Duration>() / initialized_times.len() as u32;
-        println!("✓ Average Database::new_default_initialized() time: {:?}", avg_initialized);
+        println!("✓ Average Database::new() time: {:?}", avg_initialized);
 
         // The initialized version should take longer but still be reasonable
         assert!(avg_initialized < Duration::from_secs(10), "Initialization taking too long: {:?}", avg_initialized);

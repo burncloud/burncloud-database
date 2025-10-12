@@ -1,5 +1,4 @@
 use burncloud_database::{Database, DatabaseError, Result, create_default_database};
-use std::fs;
 use std::path::PathBuf;
 
 /// Comprehensive error handling and edge case tests
@@ -34,18 +33,13 @@ fn test_all_error_variants() {
 async fn test_uninitialized_database_operations() {
     // Test that operations on uninitialized databases fail gracefully
 
-    // Test with explicit path database
-    let explicit_db = Database::new("test.db");
+    // Test with explicit path database (uninitialized)
+    let explicit_db = Database::new_with_path("test.db");
     test_uninitialized_operations(&explicit_db).await;
 
-    // Test with default path database (if creation succeeds)
-    if let Ok(default_db) = Database::new_default() {
-        test_uninitialized_operations(&default_db).await;
-    }
-
-    // Test with in-memory database
-    let memory_db = Database::new_in_memory();
-    test_uninitialized_operations(&memory_db).await;
+    // Test with temporary database path (uninitialized)
+    let temp_db = Database::new_with_path("temp_test.db");
+    test_uninitialized_operations(&temp_db).await;
 }
 
 async fn test_uninitialized_operations(db: &Database) {
@@ -154,7 +148,7 @@ async fn test_database_close_scenarios() {
     // Test various database closing scenarios
 
     // Test closing uninitialized database
-    let uninitialized_db = Database::new("test_close.db");
+    let uninitialized_db = Database::new_with_path("test_close.db");
     let close_result = uninitialized_db.close().await;
     assert!(close_result.is_ok(), "Closing uninitialized database should succeed");
 
@@ -165,12 +159,11 @@ async fn test_database_close_scenarios() {
         assert!(close_result.is_ok(), "Closing initialized database should succeed");
     }
 
-    // Test double close (should not panic)
-    let db_result = Database::new_in_memory();
-    let mut db = db_result;
-    if db.initialize().await.is_ok() {
-        let first_close = db.close().await;
-        assert!(first_close.is_ok());
+    // Test with temporary database file
+    let mut temp_db = Database::new_with_path(":memory:");
+    if temp_db.initialize().await.is_ok() {
+        let close_result = temp_db.close().await;
+        assert!(close_result.is_ok());
 
         // Note: Database is consumed by close(), so we can't test double close
         // This is actually good design - prevents use after close
@@ -192,7 +185,7 @@ async fn test_malformed_database_paths() {
     ];
 
     for problematic_path in problematic_paths {
-        let mut db = Database::new(problematic_path);
+        let mut db = Database::new_with_path(problematic_path);
         let init_result = db.initialize().await;
 
         // These should either succeed (if the path is actually valid) or fail gracefully
@@ -219,7 +212,7 @@ async fn test_race_conditions_in_initialization() {
     for i in 0..num_concurrent {
         let handle = tokio::spawn(async move {
             println!("Task {} starting initialization", i);
-            let result = Database::new_default_initialized().await;
+            let result = Database::new().await;
             println!("Task {} completed initialization", i);
             result
         });
@@ -300,7 +293,7 @@ async fn test_resource_cleanup_on_errors() {
     // Test that resources are properly cleaned up when errors occur
 
     // Test cleanup when initialization fails
-    let mut db = Database::new("/definitely/invalid/path/that/should/not/exist/database.db");
+    let mut db = Database::new_with_path("/definitely/invalid/path/that/should/not/exist/database.db");
     let init_result = db.initialize().await;
 
     match init_result {
@@ -316,8 +309,7 @@ async fn test_resource_cleanup_on_errors() {
     }
 
     // Test cleanup when operations fail after initialization
-    let db_result = Database::new_in_memory();
-    let mut db = db_result;
+    let mut db = Database::new_with_path(":memory:");
 
     if db.initialize().await.is_ok() {
         // Perform an operation that should fail

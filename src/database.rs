@@ -33,34 +33,27 @@ pub struct Database {
 }
 
 impl Database {
-    pub fn new<P: AsRef<Path>>(database_path: P) -> Self {
+    pub async fn new() -> Result<Self> {
+        let default_path = get_default_database_path()?;
+
+        create_directory_if_not_exists(&default_path)?;
+
+        let path = default_path.to_string_lossy().to_string();
+        let mut db = Self {
+            connection: None,
+            database_path: path,
+        };
+        db.initialize().await?;
+        Ok(db)
+    }
+
+    /// Create a new Database instance with a specific path (uninitialized)
+    pub fn new_with_path<P: AsRef<Path>>(database_path: P) -> Self {
         let path = database_path.as_ref().to_string_lossy().to_string();
         Self {
             connection: None,
             database_path: path,
         }
-    }
-
-    pub fn new_in_memory() -> Self {
-        Self {
-            connection: None,
-            database_path: ":memory:".to_string(),
-        }
-    }
-
-    pub fn new_default() -> Result<Self> {
-        let default_path = get_default_database_path()?;
-        Ok(Self::new(default_path))
-    }
-
-    pub async fn new_default_initialized() -> Result<Self> {
-        let default_path = get_default_database_path()?;
-
-        create_directory_if_not_exists(&default_path)?;
-
-        let mut db = Self::new(default_path);
-        db.initialize().await?;
-        Ok(db)
     }
 
     pub async fn initialize(&mut self) -> Result<()> {
@@ -163,8 +156,9 @@ impl Database {
     }
 }
 
+// Convenience function for creating a default database
 pub async fn create_default_database() -> Result<Database> {
-    Database::new_default_initialized().await
+    Database::new().await
 }
 
 // Platform detection and default path resolution functions
@@ -206,28 +200,20 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_database_new_default() {
-        let db_result = Database::new_default();
-        assert!(db_result.is_ok());
-
-        let db = db_result.unwrap();
-        // The database should be created but not initialized yet
-        assert!(db.connection.is_none());
-    }
-
-    #[tokio::test]
-    async fn test_database_new_default_initialized() {
+    async fn test_database_new() {
         // In environments where file databases might not work due to permissions
         // or configuration, we should at least test that the path resolution works
         let default_path_result = get_default_database_path();
         assert!(default_path_result.is_ok());
 
         // Test the constructor doesn't panic
-        let db_result = Database::new_default_initialized().await;
+        let db_result = Database::new().await;
         // Note: This might fail in some environments due to SQLite configuration,
         // but the path resolution and API structure are correct
         if db_result.is_ok() {
             let db = db_result.unwrap();
+            // The database should be initialized and have a connection
+            assert!(db.connection.is_some());
             let _ = db.close().await;
         }
     }
@@ -272,17 +258,17 @@ mod tests {
         assert_eq!(result, cfg!(target_os = "windows"));
     }
 
-    #[test]
-    fn test_api_consistency() {
-        // Test that the new_default constructor follows the same pattern as new()
-        let default_result = Database::new_default();
-        assert!(default_result.is_ok());
-
-        if let Ok(db) = default_result {
-            // Should not be initialized yet
-            assert!(db.connection.is_none());
+    #[tokio::test]
+    async fn test_api_consistency() {
+        // Test that Database::new() creates an initialized database
+        let db_result = Database::new().await;
+        if db_result.is_ok() {
+            let db = db_result.unwrap();
+            // Should be initialized and have a connection
+            assert!(db.connection.is_some());
             // Should have a non-memory path
             assert_ne!(db.database_path, ":memory:");
+            let _ = db.close().await;
         }
     }
 }

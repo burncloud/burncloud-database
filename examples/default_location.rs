@@ -26,41 +26,26 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Method 2: Using the constructor directly
-    println!("2. Creating database with Database::new_default()...");
-    match Database::new_default() {
-        Ok(mut db) => {
-            println!("✓ Database instance created with default path");
-
-            match db.initialize().await {
-                Ok(_) => {
-                    println!("✓ Database initialized successfully!");
-                    db.close().await?;
-                }
-                Err(e) => {
-                    println!("⚠ Could not initialize database: {}", e);
-                }
-            }
-        }
-        Err(e) => {
-            println!("✗ Could not create database with default path: {}", e);
-        }
-    }
-
-    // Method 3: Using new_default_initialized for one-step creation
-    println!("\n3. Creating database with Database::new_default_initialized()...");
-    match Database::new_default_initialized().await {
+    // Method 2: Using the new simplified constructor
+    println!("2. Creating database with Database::new()...");
+    match Database::new().await {
         Ok(db) => {
             println!("✓ Database created and initialized in one step!");
+
+            // Perform a quick test
+            let result = db.execute_query("CREATE TABLE IF NOT EXISTS test_table (id INTEGER PRIMARY KEY)").await?;
+            println!("✓ Test table created: {:?}", result);
+
             db.close().await?;
+            println!("✓ Database closed successfully");
         }
         Err(e) => {
-            println!("⚠ Could not create initialized database: {}", e);
+            println!("⚠ Could not create database: {}", e);
         }
     }
 
     // Show the default path that would be used
-    println!("\n4. Default database location:");
+    println!("\n3. Default database location:");
     println!("Platform: {}", if cfg!(target_os = "windows") { "Windows" } else { "Linux/Unix" });
 
     // This uses internal function logic to show the path

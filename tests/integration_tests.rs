@@ -66,30 +66,23 @@ async fn test_create_default_database_end_to_end() {
 }
 
 #[tokio::test]
-async fn test_database_new_default_vs_new_default_initialized() {
-    // Test the difference between new_default() and new_default_initialized()
+async fn test_database_new_with_path_vs_new_default() {
+    // Test the difference between new_with_path() and Database::new() (default)
 
-    // Test new_default() - should create Database but not initialize
-    let db_uninitialized = Database::new_default();
-    match db_uninitialized {
-        Ok(db) => {
-            // Should not be initialized yet
-            let connection_result = db.connection();
-            assert!(connection_result.is_err(), "Database should not be initialized yet");
+    // Test new_with_path() - should create Database but not initialize
+    let db_uninitialized = Database::new_with_path("test_integration.db");
+    // Should not be initialized yet
+    let connection_result = db_uninitialized.connection();
+    assert!(connection_result.is_err(), "Database should not be initialized yet");
 
-            if let Err(DatabaseError::NotInitialized) = connection_result {
-                // This is expected
-            } else {
-                panic!("Expected NotInitialized error, got other error");
-            }
-        }
-        Err(e) => {
-            println!("new_default() failed (acceptable in some environments): {}", e);
-        }
+    if let Err(DatabaseError::NotInitialized) = connection_result {
+        // This is expected
+    } else {
+        panic!("Expected NotInitialized error, got other error");
     }
 
-    // Test new_default_initialized() - should create and initialize
-    let db_initialized_result = Database::new_default_initialized().await;
+    // Test Database::new() - should create and initialize with default path
+    let db_initialized_result = Database::new().await;
     match db_initialized_result {
         Ok(db) => {
             // Should be initialized and functional
@@ -103,7 +96,7 @@ async fn test_database_new_default_vs_new_default_initialized() {
             let _ = db.close().await;
         }
         Err(e) => {
-            println!("new_default_initialized() failed (acceptable in some environments): {}", e);
+            println!("Database::new() failed (acceptable in some environments): {}", e);
         }
     }
 }
@@ -147,7 +140,7 @@ async fn test_platform_specific_paths() {
 #[tokio::test]
 async fn test_directory_creation_and_permissions() {
     // Test that directories are created properly with correct permissions
-    let db_result = Database::new_default_initialized().await;
+    let db_result = Database::new().await;
 
     match db_result {
         Ok(db) => {
@@ -179,8 +172,8 @@ async fn test_directory_creation_and_permissions() {
 #[tokio::test]
 async fn test_multiple_database_instances() {
     // Test that multiple default database instances can coexist
-    let db1_result = Database::new_default_initialized().await;
-    let db2_result = Database::new_default_initialized().await;
+    let db1_result = Database::new().await;
+    let db2_result = Database::new().await;
 
     match (db1_result, db2_result) {
         (Ok(db1), Ok(db2)) => {
@@ -207,7 +200,7 @@ async fn test_database_persistence() {
     let test_value = "persistent_test_data";
 
     // Create first database instance and insert data
-    let db1_result = Database::new_default_initialized().await;
+    let db1_result = Database::new().await;
     if let Ok(db1) = db1_result {
         let create_result = db1.execute_query(
             "CREATE TABLE IF NOT EXISTS persistence_test (id INTEGER PRIMARY KEY, value TEXT)"
@@ -222,7 +215,7 @@ async fn test_database_persistence() {
                 let _ = db1.close().await;
 
                 // Create second database instance and verify data exists
-                let db2_result = Database::new_default_initialized().await;
+                let db2_result = Database::new().await;
                 if let Ok(db2) = db2_result {
                     #[derive(sqlx::FromRow)]
                     struct PersistenceRow {
@@ -253,11 +246,7 @@ async fn test_backward_compatibility() {
     let explicit_path = temp_dir.path().join("explicit_test.db");
 
     // Test explicit path database creation
-    let explicit_db_result = Database::new(&explicit_path);
-    // Just check that the path is not the in-memory identifier
-    assert!(explicit_path.to_string_lossy() != ":memory:", "Should not be in-memory");
-
-    let mut explicit_db = explicit_db_result;
+    let mut explicit_db = Database::new_with_path(&explicit_path);
     let init_result = explicit_db.initialize().await;
 
     if init_result.is_ok() {
@@ -267,7 +256,7 @@ async fn test_backward_compatibility() {
     }
 
     // Test that default and explicit path databases are independent
-    let default_db_result = Database::new_default_initialized().await;
+    let default_db_result = Database::new().await;
     if let Ok(default_db) = default_db_result {
         let query_result = default_db.execute_query("SELECT 1 as test").await;
         assert!(query_result.is_ok(), "Default database should be functional");
@@ -300,7 +289,7 @@ fn test_error_handling_scenarios() {
     }
 
     // Test API error types
-    let db = Database::new("test.db");
+    let db = Database::new_with_path("test.db");
     let connection_result = db.connection();
     assert!(connection_result.is_err(), "Should fail when not initialized");
 
@@ -316,20 +305,17 @@ fn test_error_handling_scenarios() {
 async fn test_api_consistency() {
     // Test that all database creation APIs follow consistent patterns
 
-    // Test in-memory database (existing API)
-    let memory_db = Database::new_in_memory();
-    // We can't access the path directly, but we know it should be in-memory
-
     // Test explicit path database (existing API)
-    let explicit_db = Database::new("test.db");
+    let _explicit_db = Database::new_with_path("test.db");
     // We can't access the path directly, but we know it should be the explicit path
 
     // Test default path database (new API)
-    let default_db_result = Database::new_default();
+    let default_db_result = Database::new().await;
     match default_db_result {
         Ok(default_db) => {
-            // We can't access the path directly, but we know it should be a default path
-            println!("✓ Default database created successfully");
+            // Should be initialized and functional
+            println!("✓ Default database created and initialized successfully");
+            let _ = default_db.close().await;
         }
         Err(e) => {
             println!("Default database creation failed (acceptable): {}", e);
