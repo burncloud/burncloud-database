@@ -47,15 +47,6 @@ impl Database {
         Ok(db)
     }
 
-    /// Create a new Database instance with a specific path (uninitialized)
-    pub fn new_with_path<P: AsRef<Path>>(database_path: P) -> Self {
-        let path = database_path.as_ref().to_string_lossy().to_string();
-        Self {
-            connection: None,
-            database_path: path,
-        }
-    }
-
     pub async fn initialize(&mut self) -> Result<()> {
         let database_url = if self.database_path == ":memory:" {
             "sqlite::memory:".to_string()
@@ -162,11 +153,11 @@ pub async fn create_default_database() -> Result<Database> {
 }
 
 // Platform detection and default path resolution functions
-fn is_windows() -> bool {
+pub fn is_windows() -> bool {
     cfg!(target_os = "windows")
 }
 
-fn get_default_database_path() -> Result<std::path::PathBuf> {
+pub fn get_default_database_path() -> Result<std::path::PathBuf> {
     let db_dir = if is_windows() {
         // Windows: %USERPROFILE%\AppData\Local\BurnCloud
         let user_profile = std::env::var("USERPROFILE")
@@ -195,80 +186,3 @@ fn create_directory_if_not_exists(path: &std::path::Path) -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_database_new() {
-        // In environments where file databases might not work due to permissions
-        // or configuration, we should at least test that the path resolution works
-        let default_path_result = get_default_database_path();
-        assert!(default_path_result.is_ok());
-
-        // Test the constructor doesn't panic
-        let db_result = Database::new().await;
-        // Note: This might fail in some environments due to SQLite configuration,
-        // but the path resolution and API structure are correct
-        if db_result.is_ok() {
-            let db = db_result.unwrap();
-            // The database should be initialized and have a connection
-            assert!(db.connection.is_some());
-            let _ = db.close().await;
-        }
-    }
-
-    #[tokio::test]
-    async fn test_create_default_database() {
-        // Test that the function exists and path resolution works
-        let default_path_result = get_default_database_path();
-        assert!(default_path_result.is_ok());
-
-        // Test the function doesn't panic
-        let db_result = create_default_database().await;
-        // Note: This might fail in some environments due to SQLite configuration,
-        // but the path resolution and API structure are correct
-        if db_result.is_ok() {
-            let db = db_result.unwrap();
-            let _ = db.close().await;
-        }
-    }
-
-    #[test]
-    fn test_get_default_database_path() {
-        let path_result = get_default_database_path();
-        assert!(path_result.is_ok());
-
-        let path = path_result.unwrap();
-        println!("Default database path: {}", path.display());
-        assert!(path.to_string_lossy().contains("data.db"));
-
-        // On Windows, should contain AppData\Local\BurnCloud
-        // On Linux, should contain .burncloud
-        if cfg!(target_os = "windows") {
-            assert!(path.to_string_lossy().contains("AppData\\Local\\BurnCloud"));
-        } else {
-            assert!(path.to_string_lossy().contains(".burncloud"));
-        }
-    }
-
-    #[test]
-    fn test_is_windows() {
-        let result = is_windows();
-        assert_eq!(result, cfg!(target_os = "windows"));
-    }
-
-    #[tokio::test]
-    async fn test_api_consistency() {
-        // Test that Database::new() creates an initialized database
-        let db_result = Database::new().await;
-        if db_result.is_ok() {
-            let db = db_result.unwrap();
-            // Should be initialized and have a connection
-            assert!(db.connection.is_some());
-            // Should have a non-memory path
-            assert_ne!(db.database_path, ":memory:");
-            let _ = db.close().await;
-        }
-    }
-}

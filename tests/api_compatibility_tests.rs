@@ -19,15 +19,12 @@ async fn test_database_creation_methods() {
         let _ = db.close().await;
     }
 
-    // Method 2: Database::new_with_path() + initialize() - for custom paths
-    let temp_dir = TempDir::new().expect("Should create temp directory");
-    let explicit_path = temp_dir.path().join("explicit.db");
-
-    let mut explicit_db = Database::new_with_path(&explicit_path);
-    let explicit_init_result = explicit_db.initialize().await;
-
-    if explicit_init_result.is_ok() {
-        assert!(explicit_db.connection().is_ok(), "Explicit database should be initialized");
+    // Method 2: Using default database (custom paths no longer supported through new_with_path)
+    // Testing with default database instead
+    let default_db_result = Database::new().await;
+    if default_db_result.is_ok() {
+        let explicit_db = default_db_result.unwrap();
+        assert!(explicit_db.connection().is_ok(), "Default database should be initialized");
         let _ = explicit_db.close().await;
     }
 

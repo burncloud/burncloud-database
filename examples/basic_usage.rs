@@ -2,10 +2,8 @@ use burncloud_database::{Result, Database};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Create a temporary in-memory-like database using a temp path for this example
-    let temp_path = std::env::temp_dir().join("basic_usage_example.db");
-    let mut db = Database::new_with_path(&temp_path);
-    db.initialize().await?;
+    // Use the default database
+    let db = Database::new().await?;
 
     println!("Database created successfully!");
 
@@ -18,9 +16,6 @@ async fn main() -> Result<()> {
     println!("Database operations completed successfully!");
 
     db.close().await?;
-
-    // Clean up temp file
-    let _ = std::fs::remove_file(&temp_path);
 
     Ok(())
 }
